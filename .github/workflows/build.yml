@@ -1,36 +1,49 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
-
 name: build
-on: [pull_request, push]
+
+on:
+  push:
+  pull_request:
 
 jobs:
   build:
+    runs-on: ubuntu-22.04
+
     strategy:
       matrix:
-        # Use these Java versions
-        java: [
-          21,    # Current Java LTS
-        ]
-    runs-on: ubuntu-22.04
+        java: [21]
+
     steps:
-      - name: checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-      - name: validate gradle wrapper
+
+      - name: Validate Gradle Wrapper
         uses: gradle/wrapper-validation-action@v2
-      - name: setup jdk ${{ matrix.java }}
+
+      - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
+          distribution: microsoft
           java-version: ${{ matrix.java }}
-          distribution: 'microsoft'
-      - name: make gradle wrapper executable
+
+      # Gradle caching (VERY important for Fabric/Yarn stability)
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: build
-        run: ./gradlew build
-      - name: capture build artifacts
-        if: ${{ matrix.java == '21' }} # Only upload artifacts built from latest java
+
+      - name: Build
+        env:
+          # Force IPv4 and increase network timeouts
+          JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
+          GRADLE_OPTS: >
+            -Djava.net.preferIPv4Stack=true
+            -Dorg.gradle.internal.http.connectionTimeout=60000
+            -Dorg.gradle.internal.http.socketTimeout=60000
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Upload build artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Artifacts
